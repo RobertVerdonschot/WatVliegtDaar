@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Wat vliegt daar?</title>
 <link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <meta name="theme-color" content="#0f172a">
 <style>
   :root {
@@ -24,7 +26,8 @@
     padding: max(16px, env(safe-area-inset-top)) 16px 32px;
   }
   main { max-width: 520px; margin: 0 auto; }
-  h1 { font-size: 20px; margin: 4px 0 16px; font-weight: 600; }
+  h1 { font-size: 20px; margin: 4px 0 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  h1 img { width: 34px; height: 34px; }
   .card {
     background: var(--card); border-radius: 16px; padding: 18px;
     margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08);
@@ -35,11 +38,16 @@
   .route .arrow { color: var(--accent); margin: 0 4px; }
   .sub { color: var(--muted); font-size: 14px; margin-bottom: 14px; }
   dl { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin: 0; }
+  .f { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
+  .f img { width: 30px; height: 30px; flex: none; margin-top: 4px; }
+  .f.wide { grid-column: 1 / -1; }
   dt { color: var(--muted); font-size: 13px; }
   dd { margin: 0; font-size: 18px; font-weight: 600; }
   .msg { text-align: center; color: var(--muted); padding: 40px 12px; }
+  .msg img { width: 88px; height: 88px; display: block; margin: 0 auto 12px; }
   .msg strong { display: block; color: var(--text); font-size: 18px; margin-bottom: 6px; }
   footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 18px; }
+  footer a { color: inherit; }
   button {
     font: inherit; background: var(--accent); color: var(--card); border: 0;
     border-radius: 10px; padding: 10px 18px; margin-top: 14px; font-weight: 600;
@@ -48,8 +56,8 @@
 </head>
 <body>
 <main>
-  <h1>Wat vliegt daar?</h1>
-  <div id="content"><div class="card msg"><strong>Even je locatie zoeken...</strong></div></div>
+  <h1><img src="/icons/airplane.webp" alt="">Wat vliegt daar?</h1>
+  <div id="content"><div class="card msg"><img src="/icons/location-pin.webp" alt=""><strong>Even je locatie zoeken...</strong></div></div>
   <footer id="footer"></footer>
 </main>
 <script>
@@ -63,14 +71,20 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const num = n => n.toLocaleString('nl-NL');
 const km = m => m < 1000 ? `${num(Math.round(m / 10) * 10)} m` : `${(m / 1000).toLocaleString('nl-NL', {maximumFractionDigits: 1})} km`;
 
-function message(title, text, withButton) {
-  content.innerHTML = `<div class="card msg"><strong>${esc(title)}</strong>${esc(text)}` +
+const icon = name => `<img src="/icons/${name}.webp" alt="">`;
+
+function message(title, text, withButton, iconName) {
+  content.innerHTML = `<div class="card msg">${iconName ? icon(iconName) : ''}<strong>${esc(title)}</strong>${esc(text)}` +
     (withButton ? `<br><button onclick="refresh()">Opnieuw</button>` : '') + `</div>`;
 }
 
 function place(a) {
   if (!a) return null;
   return a.city || a.name || a.code;
+}
+
+function field(iconName, label, value, wide) {
+  return `<div class="f${wide ? ' wide' : ''}">${icon(iconName)}<div><dt>${label}</dt><dd>${esc(value)}</dd></div></div>`;
 }
 
 function card(p) {
@@ -89,12 +103,12 @@ function card(p) {
     <div class="route">${title}</div>
     <div class="sub">${subParts.join('') || '&nbsp;'}</div>
     <dl>
-      <div><dt>Hoogte</dt><dd>${p.altitude_m != null ? num(p.altitude_m) + ' m' : '?'}${vertical}</dd></div>
-      <div><dt>Snelheid</dt><dd>${p.speed_kmh != null ? num(p.speed_kmh) + ' km/u' : '?'}</dd></div>
-      <div><dt>Toestel</dt><dd>${esc(p.aircraft_type || '?')}</dd></div>
-      <div><dt>Waar</dt><dd>${esc(where)}</dd></div>
-      <div><dt>Vliegt richting</dt><dd>${esc(p.heading || '?')}</dd></div>
-      <div><dt>Registratie</dt><dd>${esc(p.registration || '?')}</dd></div>
+      ${field('mountain', 'Hoogte', (p.altitude_m != null ? num(p.altitude_m) + ' m' : '?') + vertical)}
+      ${field('speedometer', 'Snelheid', p.speed_kmh != null ? num(p.speed_kmh) + ' km/u' : '?')}
+      ${field('compass', 'Vliegt richting', p.heading || '?')}
+      ${field('license-plate', 'Registratie', p.registration || '?')}
+      ${field('location-pin', 'Waar', where, true)}
+      ${field(p.is_helicopter ? 'helicopter' : 'airplane', 'Toestel', p.aircraft_type || '?', true)}
     </dl>
   </div>`;
 }
@@ -111,11 +125,11 @@ async function refresh() {
     } else if (data.nearest) {
       const n = data.nearest;
       const name = n.callsign || n.registration || 'een toestel';
-      message('Niks boven je hoofd', `Dichtstbij: ${name}, ${km(n.distance_m)} ${n.direction || ''}.`);
+      message('Niks boven je hoofd', `Dichtstbij: ${name}, ${km(n.distance_m)} ${n.direction || ''}.`, false, 'cloud');
     } else {
-      message('Niks boven je hoofd', 'Ook in de buurt vliegt nu niks.');
+      message('Niks boven je hoofd', 'Ook in de buurt vliegt nu niks.', false, 'cloud');
     }
-    footer.textContent = `Bijgewerkt ${new Date().toLocaleTimeString('nl-NL')} · ververst elke 15 s · data: adsb.fi, adsb.lol, adsbdb.com`;
+    footer.innerHTML = `Bijgewerkt ${new Date().toLocaleTimeString('nl-NL')} &middot; ververst elke 15 s &middot; data: adsb.fi, adsb.lol, adsbdb.com &middot; icoontjes: <a href="https://www.thiings.co" target="_blank" rel="noopener">thiings.co</a>`;
   } catch (e) {
     message('Lukt even niet', e.message || 'Geen verbinding.', true);
   }
@@ -129,7 +143,7 @@ function start() {
   navigator.geolocation.watchPosition(
     pos => { const first = !position; position = pos; if (first) refresh(); },
     err => message('Geen locatie',
-      err.code === 1 ? 'Geef de app toestemming voor je locatie (instellingen van je browser).' : 'Locatie niet gevonden.', true),
+      err.code === 1 ? 'Geef de app toestemming voor je locatie (instellingen van je browser).' : 'Locatie niet gevonden.', true, 'location-pin'),
     {enableHighAccuracy: false, maximumAge: 30000, timeout: 20000}
   );
   clearInterval(timer);
