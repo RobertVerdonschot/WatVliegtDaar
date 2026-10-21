@@ -11,8 +11,8 @@ Draait op: https://wat-vliegt-daar-q57hkofe2q-ew.a.run.app
 1. Ga naar [Google Cloud Shell](https://shell.cloud.google.com) en draai:
 
    ```bash
-   git clone https://github.com/RobertVerdonschot/wat-vliegt-daar.git
-   cd wat-vliegt-daar
+   git clone https://github.com/RobertVerdonschot/WatVliegtDaar.git
+   cd WatVliegtDaar
    gcloud config set project meal-stress-analyzer
    ./deploy.sh
    ```
