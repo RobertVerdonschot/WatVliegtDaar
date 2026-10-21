@@ -4,20 +4,21 @@ Simpele webapp: open 'm op je telefoon als er iets overkomt, en je ziet welk
 vliegtuig of welke heli dat is. Maatschappij en vluchtnummer, van waar naar
 waar, hoogte, snelheid, type toestel. Geen kaart, geen gedoe.
 
-Staat los van de Meal Stress Analyzer in de rest van deze repo; eigen
-Cloud Run-service, eigen deploy.
+Draait op: https://wat-vliegt-daar-q57hkofe2q-ew.a.run.app
 
 ## Neerzetten
 
-1. Ga naar [Google Cloud Shell](https://shell.cloud.google.com), clone deze
-   repo en draai:
+1. Ga naar [Google Cloud Shell](https://shell.cloud.google.com) en draai:
 
    ```bash
-   ./flighttracker/deploy.sh
+   git clone https://github.com/RobertVerdonschot/wat-vliegt-daar.git
+   cd wat-vliegt-daar
+   gcloud config set project meal-stress-analyzer
+   ./deploy.sh
    ```
 
-   Gebruikt hetzelfde Google Cloud-project als je meal-app (of vraagt om een
-   project-id). Geen secrets nodig.
+   Draait in hetzelfde Google Cloud-project als de Meal Stress Analyzer, als
+   losse Cloud Run-service. Geen secrets nodig.
 2. Het script print een URL. Open die op je telefoon in Chrome, geef
    toestemming voor je locatie, en kies menu > *Toevoegen aan startscherm*.
 
@@ -59,7 +60,6 @@ De drempel en zoekstraal staan bovenin `main.py` (`MIN_ELEVATION_DEG`,
 ## Lokaal draaien
 
 ```bash
-cd flighttracker
 pip install -r requirements.txt
 python main.py   # http://localhost:8080
 ```

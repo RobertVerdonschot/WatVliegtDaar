@@ -2,8 +2,8 @@
 # Zet "Wat vliegt daar?" op Google Cloud Run.
 #
 # Draai dit in Google Cloud Shell (shell.cloud.google.com): clone de repo en
-# start ./flighttracker/deploy.sh. Geen secrets of tokens nodig, de app
-# gebruikt alleen gratis openbare databronnen.
+# start ./deploy.sh. Geen secrets of tokens nodig, de app gebruikt alleen
+# gratis openbare databronnen.
 set -euo pipefail
 
 REGION="${REGION:-europe-west1}"
