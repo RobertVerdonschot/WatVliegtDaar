@@ -57,6 +57,15 @@ De drempel en zoekstraal staan bovenin `main.py` (`MIN_ELEVATION_DEG`,
 - De gratis API's hebben geen garantie. Als ze stoppen of een key gaan
   vragen, moet de code aangepast.
 
+## Icoontjes
+
+De 3D-icoontjes in `static/icons/` en het startscherm-icoon komen van
+[thiings.co](https://www.thiings.co), onder hun gratis licentie: alleen voor
+persoonlijk, niet-commercieel gebruik, met zichtbare naamsvermelding (staat
+in de footer van de app). Die licentie geldt voor de icoontjes, niet voor de
+rest van deze repo. Wil je de app ooit commercieel inzetten, dan heb je een
+betaalde licentie nodig of moeten de icoontjes eruit.
+
 ## Lokaal draaien
 
 ```bash

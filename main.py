@@ -11,10 +11,8 @@ from __future__ import annotations
 
 import math
 import os
-import struct
 import threading
 import time
-import zlib
 from pathlib import Path
 
 import requests
@@ -306,11 +304,11 @@ def manifest():
             "short_name": "Wat vliegt daar",
             "start_url": "/",
             "display": "standalone",
-            "background_color": "#0f172a",
+            "background_color": "#bae6fd",
             "theme_color": "#0f172a",
             "icons": [
-                {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
-                {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"},
+                {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+                {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
             ],
         }
     )
@@ -322,22 +320,17 @@ def service_worker():
     return Response("self.addEventListener('fetch', () => {});", mimetype="application/javascript")
 
 
-def _solid_png(size: int, rgb: tuple[int, int, int]) -> bytes:
-    row = bytes([0]) + bytes(rgb) * size
-    compressed = zlib.compress(row * size, 9)
-
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data))
-
-    ihdr = struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0)
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", compressed) + chunk(b"IEND", b"")
-
-
 @app.get("/icon-<int:size>.png")
 def icon(size: int):
     if size not in (192, 512):
         abort(404)
-    return Response(_solid_png(size, (14, 116, 144)), mimetype="image/png")
+    return send_from_directory(STATIC_DIR, f"icon-{size}.png")
+
+
+@app.get("/icons/<name>")
+def icons(name: str):
+    # 3D-icoontjes van thiings.co (gratis licentie, naamsvermelding staat in de footer).
+    return send_from_directory(STATIC_DIR / "icons", name, max_age=7 * 24 * 3600)
 
 
 if __name__ == "__main__":
