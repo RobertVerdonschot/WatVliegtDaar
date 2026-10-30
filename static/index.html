@@ -94,11 +94,18 @@ function field(iconName, label, value, wide) {
 function card(p) {
   const from = place(p.from), to = place(p.to);
   const kind = p.is_helicopter ? 'Helikopter' : 'Vliegtuig';
-  const title = from && to
-    ? `${esc(from)}<span class="arrow">&rarr;</span>${esc(to)}`
-    : (p.is_helicopter ? 'Helikopter' : 'Route onbekend');
+  let title = p.is_helicopter ? 'Helikopter' : 'Route onbekend';
   const subParts = [];
-  if (from && to) subParts.push(`${esc(p.from.name)} naar ${esc(p.to.name)}`);
+  if (from && to) {
+    title = `${esc(from)}<span class="arrow">&rarr;</span>${esc(to)}`;
+    subParts.push(`${esc(p.from.name)} naar ${esc(p.to.name)}`);
+  } else if (from) {
+    title = `Vanaf ${esc(from)}`;
+    subParts.push(`Net vertrokken van ${esc(p.from.name)}, bestemming onbekend`);
+  } else if (to) {
+    title = `Naar ${esc(to)}`;
+    subParts.push(`Gaat landen op ${esc(p.to.name)}, vertrek onbekend`);
+  }
   const who = [p.airline, p.flight_number || p.callsign].filter(Boolean).map(esc).join(' &middot; ');
   const vertical = {stijgt: ', stijgt', daalt: ', daalt'}[p.vertical] || '';
   const where = p.direction ? `${km(p.distance_m)} ${p.direction}` : 'recht boven je';

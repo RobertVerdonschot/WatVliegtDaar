@@ -42,6 +42,12 @@ gebruikt.
   Maximaal 3 toestellen, het hoogst-aan-de-hemel eerst. Is er niks, dan zie je
   welk toestel het dichtstbij is.
 - Route, maatschappij en type komen van [adsbdb.com](https://www.adsbdb.com).
+- Is een toestel laag en stijgend vlak bij een luchthaven (< 3 km hoog, < 40 km
+  van het veld), dan is het daar net vertrokken. Laag en dalend (< 1,5 km
+  hoog, < 25 km) = gaat daar landen. Spreekt de routedatabase dat tegen, dan
+  wint de positie en zie je bv. "Vanaf Eindhoven, bestemming onbekend". De
+  luchthavenlijst (`airports.csv`, alleen velden met lijnvluchten) komt uit
+  [OurAirports](https://ourairports.com/data/), public domain.
 
 De drempel en zoekstraal staan bovenin `main.py` (`MIN_ELEVATION_DEG`,
 `SEARCH_RADIUS_NM`) als je ze anders wil.
@@ -49,9 +55,12 @@ De drempel en zoekstraal staan bovenin `main.py` (`MIN_ELEVATION_DEG`,
 ## Beperkingen, eerlijk gezegd
 
 - **Route kan fout zijn.** adsbdb kent per vluchtnummer één vaste route en
-  die wordt door vrijwilligers bijgehouden. Ligt het toestel duidelijk naast
-  die route, dan toont de app "Route onbekend" in plaats van iets fouts. Een
-  fout dat dicht bij de echte route ligt glipt er wel doorheen.
+  die wordt door vrijwilligers bijgehouden. Ryanair en andere maatschappijen
+  hergebruiken vluchtnummers, dus dat gaat soms mis (getest: een Ryanair
+  Eindhoven -> Milaan stond erin als Dortmund -> Malaga). Bij vertrek en
+  landing vangt de luchthavencheck dat af. Op kruishoogte niet: ligt het
+  toestel dan grofweg op de lijn van de foute route, dan zie je die foute
+  route.
 - **Niet alles is zichtbaar.** Alleen toestellen met een transponder die door
   een ontvanger van deze netwerken wordt opgepikt. Militair, sommige heli's
   en laagvliegende kleine toestellen kunnen ontbreken.

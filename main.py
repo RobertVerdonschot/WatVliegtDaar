@@ -9,6 +9,7 @@ De bronnen zelf sturen geen CORS-headers, daarom loopt alles via deze server.
 
 from __future__ import annotations
 
+import csv
 import math
 import os
 import threading
@@ -19,6 +20,7 @@ import requests
 from flask import Flask, Response, abort, jsonify, request, send_from_directory
 
 STATIC_DIR = Path(__file__).parent / "static"
+AIRPORTS_FILE = Path(__file__).parent / "airports.csv"
 
 # Zoekstraal rond de gebruiker, in zeemijlen (wat de ADS-B API's verwachten).
 SEARCH_RADIUS_NM = 10
@@ -156,6 +158,41 @@ def _airport(a: dict | None) -> dict | None:
     }
 
 
+def _load_airports() -> list[dict]:
+    # Luchthavens met lijnvluchten, uit OurAirports (public domain); zie README.
+    with AIRPORTS_FILE.open(encoding="utf-8") as f:
+        return [
+            {"city": r["city"] or r["name"], "name": r["name"], "code": r["iata"],
+             "country": r["country"], "lat": float(r["lat"]), "lon": float(r["lon"])}
+            for r in csv.DictReader(f)
+        ]
+
+
+_AIRPORTS = _load_airports()
+
+
+def _nearest_airport(lat: float, lon: float, max_m: float) -> dict | None:
+    best = min(_AIRPORTS, key=lambda a: _haversine_m(lat, lon, a["lat"], a["lon"]))
+    return dict(best) if _haversine_m(lat, lon, best["lat"], best["lon"]) <= max_m else None
+
+
+def _local_airport(ac: dict, alt_ft: float | None, vertical: str) -> tuple[str, dict] | None:
+    # Laag en stijgend vlak bij een luchthaven = net daar vertrokken; laag en
+    # dalend = gaat daar landen. Dat weten we zeker uit de positie zelf, en
+    # het is betrouwbaarder dan de routedatabase (die zat er bv. bij een
+    # Ryanair uit Eindhoven naast met "Dortmund -> Malaga").
+    if alt_ft is None:
+        return None
+    alt_m = alt_ft * 0.3048
+    if vertical == "stijgt" and alt_m < 3000:
+        ap = _nearest_airport(ac["lat"], ac["lon"], 40_000)
+        return ("from", ap) if ap else None
+    if vertical == "daalt" and alt_m < 1500:
+        ap = _nearest_airport(ac["lat"], ac["lon"], 25_000)
+        return ("to", ap) if ap else None
+    return None
+
+
 def _route_is_plausible(route: dict, lat: float, lon: float) -> bool:
     # De routedatabase kent per vluchtnummer één vaste route; soms klopt die
     # niet (meerdere legs, gewijzigd schema). Ligt het toestel ver naast de
@@ -253,6 +290,13 @@ def _describe(ac: dict, lat: float, lon: float, with_details: bool) -> dict:
     route = _route_for(callsign, ac["lat"], ac["lon"]) if not is_heli else None
     if route:
         item.update(route)
+    local = _local_airport(ac, alt_ft, item["vertical"]) if not is_heli else None
+    if local:
+        side, ap = local
+        if not (item[side] and item[side]["code"] == ap["code"]):
+            # Routedatabase spreekt de positie tegen: alleen tonen wat we zeker weten.
+            item["from"] = item["to"] = None
+            item[side] = ap
     info = _aircraft_info(ac["hex"]) if ac.get("hex") else {}
     if not item["airline"]:
         item["airline"] = info.get("owner")

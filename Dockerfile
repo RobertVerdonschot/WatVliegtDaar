@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py .
+COPY main.py airports.csv ./
 COPY static/ static/
 
 # Cloud Run sets $PORT; shell form so it gets expanded at container start.
