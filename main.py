@@ -27,6 +27,9 @@ SEARCH_RADIUS_NM = 10
 # hoogte binnen ~14 km afstand, een heli op 300 m binnen ~430 m.
 MIN_ELEVATION_DEG = 35
 MAX_RESULTS = 3
+# Posities worden doorgerekend naar "nu" (koers + snelheid), maar niet verder
+# dan dit: een oud signaal doorrekenen geeft schijnprecisie.
+MAX_EXTRAPOLATE_S = 20
 
 POSITION_SOURCES = [
     "https://opendata.adsb.fi/api/v3/lat/{lat}/lon/{lon}/dist/{dist}",
@@ -88,7 +91,7 @@ def _compass(deg: float | None) -> str | None:
     return _COMPASS[int((deg + 22.5) // 45) % 8]
 
 
-def _fetch_positions(lat: float, lon: float) -> list[dict]:
+def _fetch_positions(lat: float, lon: float) -> tuple[float, list[dict]]:
     # Afronden op ~100 m zodat herhaalde verzoeken vanaf dezelfde plek de
     # cache raken en we de gratis API's niet onnodig belasten.
     key = ("pos", round(lat, 3), round(lon, 3))
@@ -105,9 +108,24 @@ def _fetch_positions(lat: float, lon: float) -> list[dict]:
         except (requests.RequestException, ValueError) as exc:
             last_error = exc
             continue
-        _cache.set(key, aircraft, ttl=5)
-        return aircraft
+        result = (time.time(), aircraft)
+        _cache.set(key, result, ttl=2)
+        return result
     raise RuntimeError(f"Geen positiedata beschikbaar: {last_error}")
+
+
+def _extrapolate(ac: dict, fetched_at: float) -> dict:
+    # Positie is `seen_pos` seconden oud op het moment van ophalen. Een
+    # vliegtuig op 300 km/u legt 80 m/s af, dus een paar seconden telt al.
+    ac = dict(ac)  # cache-object niet aanpassen
+    gs, track, seen = ac.get("gs"), ac.get("track"), ac.get("seen_pos")
+    if not all(isinstance(v, (int, float)) for v in (gs, track, seen)):
+        return ac
+    age = min(seen + (time.time() - fetched_at), MAX_EXTRAPOLATE_S)
+    dist = gs * 0.514444 * age
+    ac["lat"] += dist * math.cos(math.radians(track)) / 111320
+    ac["lon"] += dist * math.sin(math.radians(track)) / (111320 * math.cos(math.radians(ac["lat"])))
+    return ac
 
 
 def _adsbdb(path: str, ttl: float) -> dict | None:
@@ -258,7 +276,7 @@ def overhead():
         abort(400)
 
     try:
-        raw = _fetch_positions(lat, lon)
+        fetched_at, raw = _fetch_positions(lat, lon)
     except RuntimeError:
         return jsonify({"error": "Vliegtuigdata is nu even niet bereikbaar."}), 503
 
@@ -269,6 +287,7 @@ def overhead():
             continue
         if ac.get("t") in ("GND", "TWR") or str(ac.get("category", "")).startswith("C"):
             continue  # grondvoertuigen en vaste zenders
+        ac = _extrapolate(ac, fetched_at)
         dist_m = max(_haversine_m(lat, lon, ac["lat"], ac["lon"]), 1.0)
         ac["_elev"] = round(math.degrees(math.atan2(max(alt_ft, 0) * 0.3048, dist_m)))
         ac["_dist"] = dist_m

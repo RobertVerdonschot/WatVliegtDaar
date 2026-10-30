@@ -27,11 +27,16 @@ gebruikt.
 
 ## Hoe het werkt
 
-- Je telefoon stuurt je locatie naar de server (`/api/overhead`), elke 15
-  seconden zolang de app open staat.
+- Je telefoon stuurt je locatie (GPS, nauwkeurig) naar de server
+  (`/api/overhead`), elke 5 seconden zolang de app open staat. Is je locatie
+  onnauwkeuriger dan 300 m, dan zegt de app dat.
 - De server haalt alle toestellen binnen ~18 km op bij
   [adsb.fi](https://adsb.fi) (reserve: [adsb.lol](https://adsb.lol)).
-  Beide zijn gratis, door vrijwilligers gedragen ADS-B-netwerken.
+  Beide zijn gratis, door vrijwilligers gedragen ADS-B-netwerken. Hun data is
+  meestal minder dan 1-2 seconden oud (gemeten rond Schiphol).
+- Elke positie wordt met koers en snelheid doorgerekend naar "nu" (max 20 s
+  vooruit). Bij een test met 10 s oude data scheelde dat mediaan 870 m naar
+  40 m afwijking.
 - "Boven je" = minstens 35 graden boven de horizon. Een lijnvliegtuig op 10 km
   hoogte telt dan tot ~14 km afstand mee, een heli op 300 m tot ~430 m.
   Maximaal 3 toestellen, het hoogst-aan-de-hemel eerst. Is er niks, dan zie je

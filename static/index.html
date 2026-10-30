@@ -48,6 +48,7 @@
   .msg strong { display: block; color: var(--text); font-size: 18px; margin-bottom: 6px; }
   footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 18px; }
   footer a { color: inherit; }
+  .note { color: var(--muted); font-size: 14px; text-align: center; margin: 4px 8px 0; }
   button {
     font: inherit; background: var(--accent); color: var(--card); border: 0;
     border-radius: 10px; padding: 10px 18px; margin-top: 14px; font-weight: 600;
@@ -58,14 +59,17 @@
 <main>
   <h1><img src="/icons/airplane.webp" alt="">Wat vliegt daar?</h1>
   <div id="content"><div class="card msg"><img src="/icons/location-pin.webp" alt=""><strong>Even je locatie zoeken...</strong></div></div>
+  <div id="note" class="note" hidden></div>
   <footer id="footer"></footer>
 </main>
 <script>
-const REFRESH_MS = 15000;
+const REFRESH_MS = 5000;
 const content = document.getElementById('content');
 const footer = document.getElementById('footer');
 let position = null;
 let timer = null;
+let busy = false;
+const note = document.getElementById('note');
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = n => n.toLocaleString('nl-NL');
@@ -114,8 +118,13 @@ function card(p) {
 }
 
 async function refresh() {
-  if (!position) return;
-  const {latitude, longitude} = position.coords;
+  if (!position || busy) return;
+  busy = true;
+  const {latitude, longitude, accuracy} = position.coords;
+  // Binnen of met "locatie: bij benadering" kan je telefoon honderden meters
+  // ernaast zitten; dan klopt "boven je" ook niet. Zeg dat dan gewoon.
+  note.hidden = !(accuracy > 300);
+  note.textContent = `Je locatie is onnauwkeurig (\u00b1 ${km(accuracy)}). Buiten en met "nauwkeurige locatie" aan werkt het beter.`;
   try {
     const r = await fetch(`/api/overhead?lat=${latitude.toFixed(4)}&lon=${longitude.toFixed(4)}`);
     const data = await r.json();
@@ -129,9 +138,11 @@ async function refresh() {
     } else {
       message('Niks boven je hoofd', 'Ook in de buurt vliegt nu niks.', false, 'cloud');
     }
-    footer.innerHTML = `Bijgewerkt ${new Date().toLocaleTimeString('nl-NL')} &middot; ververst elke 15 s &middot; data: adsb.fi, adsb.lol, adsbdb.com &middot; icoontjes: <a href="https://www.thiings.co" target="_blank" rel="noopener">thiings.co</a>`;
+    footer.innerHTML = `Bijgewerkt ${new Date().toLocaleTimeString('nl-NL')} &middot; ververst elke 5 s &middot; data: adsb.fi, adsb.lol, adsbdb.com &middot; icoontjes: <a href="https://www.thiings.co" target="_blank" rel="noopener">thiings.co</a>`;
   } catch (e) {
     message('Lukt even niet', e.message || 'Geen verbinding.', true);
+  } finally {
+    busy = false;
   }
 }
 
@@ -142,9 +153,14 @@ function start() {
   }
   navigator.geolocation.watchPosition(
     pos => { const first = !position; position = pos; if (first) refresh(); },
-    err => message('Geen locatie',
-      err.code === 1 ? 'Geef de app toestemming voor je locatie (instellingen van je browser).' : 'Locatie niet gevonden.', true, 'location-pin'),
-    {enableHighAccuracy: false, maximumAge: 30000, timeout: 20000}
+    err => {
+      // Een time-out terwijl we al een locatie hebben is geen probleem, de
+      // vorige positie blijft dan gewoon in gebruik.
+      if (position && err.code !== 1) return;
+      message('Geen locatie',
+        err.code === 1 ? 'Geef de app toestemming voor je locatie (instellingen van je browser).' : 'Locatie niet gevonden.', true, 'location-pin');
+    },
+    {enableHighAccuracy: true, maximumAge: 5000, timeout: 20000}
   );
   clearInterval(timer);
   timer = setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
