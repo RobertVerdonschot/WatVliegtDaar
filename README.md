@@ -30,7 +30,7 @@ gebruikt.
 - Je telefoon stuurt je locatie (GPS, nauwkeurig) naar de server
   (`/api/overhead`), elke 5 seconden zolang de app open staat. Is je locatie
   onnauwkeuriger dan 300 m, dan zegt de app dat.
-- De server haalt alle toestellen binnen ~18 km op bij
+- De server haalt alle toestellen binnen ~37 km op bij
   [adsb.fi](https://adsb.fi) (reserve: [adsb.lol](https://adsb.lol)).
   Beide zijn gratis, door vrijwilligers gedragen ADS-B-netwerken. Hun data is
   meestal minder dan 1-2 seconden oud (gemeten rond Schiphol).
@@ -41,6 +41,13 @@ gebruikt.
   hoogte telt dan tot ~14 km afstand mee, een heli op 300 m tot ~430 m.
   Maximaal 3 toestellen, het hoogst-aan-de-hemel eerst. Is er niks, dan zie je
   welk toestel het dichtstbij is.
+- Een laagvlieger is in een halve minuut over je heen. Daarom rekent de app
+  met koers, snelheid en stijgsnelheid terug en vooruit: wat de afgelopen 2
+  minuten over je heen kwam of in de komende 30 s komt, staat er ook bij
+  ("Kwam 40 s geleden over je heen", of "Vloog 1 min geleden langs" als hij
+  niet hoger dan 60 graden kwam). Rechte lijn, dus bij een bocht klopt het
+  minder; daarom niet verder terug dan 2 minuten. Hoge toestellen die nu nog
+  in beeld zijn krijgen geen tijd erbij.
 - Route, maatschappij en type komen van [adsbdb.com](https://www.adsbdb.com).
 - Is een toestel laag en stijgend vlak bij een luchthaven (< 3 km hoog, < 40 km
   van het veld), dan is het daar net vertrokken. Laag en dalend (< 1,5 km

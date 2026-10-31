@@ -34,6 +34,7 @@
   }
   .top { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 14px; }
   .tag { background: var(--accent); color: var(--card); border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 600; }
+  .when { color: var(--accent); font-weight: 600; font-size: 15px; margin-top: 6px; }
   .route { font-size: 24px; font-weight: 700; margin: 6px 0 2px; overflow-wrap: anywhere; }
   .route .arrow { color: var(--accent); margin: 0 4px; }
   .sub { color: var(--muted); font-size: 14px; margin-bottom: 14px; }
@@ -91,6 +92,22 @@ function field(iconName, label, value, wide) {
   return `<div class="f${wide ? ' wide' : ''}">${icon(iconName)}<div><dt>${label}</dt><dd>${esc(value)}</dd></div></div>`;
 }
 
+function secs(s) {
+  s = Math.abs(s);
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60), r = s % 60;
+  return r ? `${m} min ${r} s` : `${m} min`;
+}
+
+// Alleen voor toestellen die nu niet boven je zijn maar dat net waren of zo
+// worden. "over" als hij (bijna) recht boven je komt, anders "langs".
+function when(p) {
+  if (!p.pass) return '';
+  const t = p.pass.in_s, over = p.pass.overhead;
+  if (t < 0) return over ? `Kwam ${secs(t)} geleden over je heen` : `Vloog ${secs(t)} geleden langs`;
+  return over ? `Komt over ${secs(t)} over je heen` : `Komt over ${secs(t)} langs`;
+}
+
 function card(p) {
   const from = place(p.from), to = place(p.to);
   const kind = p.is_helicopter ? 'Helikopter' : 'Vliegtuig';
@@ -111,6 +128,7 @@ function card(p) {
   const where = p.direction ? `${km(p.distance_m)} ${p.direction}` : 'recht boven je';
   return `<div class="card">
     <div class="top"><span>${who || esc(p.registration || 'Onbekend toestel')}</span><span class="tag">${kind}</span></div>
+    ${when(p) ? `<div class="when">${esc(when(p))}</div>` : ''}
     <div class="route">${title}</div>
     <div class="sub">${subParts.join('') || '&nbsp;'}</div>
     <dl>
@@ -158,8 +176,19 @@ function start() {
     message('Geen locatie', 'Je browser geeft geen locatie door.');
     return;
   }
+  // Snel starten met de laatst bekende (grove) locatie, daarna verfijnt
+  // watchPosition met GPS. Een nauwkeurige eerste fix kan 5-20 s duren.
+  navigator.geolocation.getCurrentPosition(
+    pos => { if (!position) { position = pos; refresh(); } },
+    () => {},
+    {enableHighAccuracy: false, maximumAge: 120000, timeout: 5000}
+  );
   navigator.geolocation.watchPosition(
-    pos => { const first = !position; position = pos; if (first) refresh(); },
+    pos => {
+      const first = !position || position.coords.accuracy > 300;
+      position = pos;
+      if (first) refresh();
+    },
     err => {
       // Een time-out terwijl we al een locatie hebben is geen probleem, de
       // vorige positie blijft dan gewoon in gebruik.

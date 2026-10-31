@@ -23,12 +23,19 @@ STATIC_DIR = Path(__file__).parent / "static"
 AIRPORTS_FILE = Path(__file__).parent / "airports.csv"
 
 # Zoekstraal rond de gebruiker, in zeemijlen (wat de ADS-B API's verwachten).
-SEARCH_RADIUS_NM = 10
+SEARCH_RADIUS_NM = 20
 # Een toestel telt als "boven je" als het minstens zo hoog boven de horizon
 # staat. 90 = loodrecht boven je. Bij 35 graden zit een vliegtuig op 10 km
 # hoogte binnen ~14 km afstand, een heli op 300 m binnen ~430 m.
 MIN_ELEVATION_DEG = 35
 MAX_RESULTS = 3
+# Ook tonen wat net over je heen kwam of zo komt, zodat je een laagvlieger
+# niet mist omdat de app nog moest opstarten. Teruggerekend met koers,
+# snelheid en stijg/daalsnelheid; rechte lijn, dus niet te ver terug.
+LOOK_BACK_S = 120
+LOOK_AHEAD_S = 30
+# Kwam hij op zijn dichtste punt minstens zo hoog, dan "kwam over", anders "vloog langs".
+OVERHEAD_DEG = 60
 # Posities worden doorgerekend naar "nu" (koers + snelheid), maar niet verder
 # dan dit: een oud signaal doorrekenen geeft schijnprecisie.
 MAX_EXTRAPOLATE_S = 20
@@ -128,6 +135,30 @@ def _extrapolate(ac: dict, fetched_at: float) -> dict:
     ac["lat"] += dist * math.cos(math.radians(track)) / 111320
     ac["lon"] += dist * math.sin(math.radians(track)) / (111320 * math.cos(math.radians(ac["lat"])))
     return ac
+
+
+def _pass_info(ac: dict, alt_ft: float, lat: float, lon: float) -> tuple[int, int]:
+    """(hoogste elevatie in graden, seconden tot dat moment) binnen het
+    venster [-LOOK_BACK_S, +LOOK_AHEAD_S]. Negatief = in het verleden."""
+    # Platte benadering rond de gebruiker: ruim nauwkeurig genoeg op ~30 km.
+    x = (ac["lon"] - lon) * 111320 * math.cos(math.radians(lat))
+    y = (ac["lat"] - lat) * 111320
+    gs, track = ac.get("gs"), ac.get("track")
+    if isinstance(gs, (int, float)) and isinstance(track, (int, float)):
+        v = gs * 0.514444
+        vx, vy = v * math.sin(math.radians(track)), v * math.cos(math.radians(track))
+    else:
+        vx = vy = 0.0
+    rate = ac.get("baro_rate", ac.get("geom_rate"))
+    vz = rate * 0.3048 / 60 if isinstance(rate, (int, float)) else 0.0
+    best = (-90.0, 0)
+    for t in range(-LOOK_BACK_S, LOOK_AHEAD_S + 1, 2):
+        h = max(alt_ft * 0.3048 + vz * t, 0.0)
+        d = max(math.hypot(x + vx * t, y + vy * t), 1.0)
+        e = math.degrees(math.atan2(h, d))
+        if e > best[0]:
+            best = (e, t)
+    return round(best[0]), best[1]
 
 
 def _adsbdb(path: str, ttl: float) -> dict | None:
@@ -280,6 +311,11 @@ def _describe(ac: dict, lat: float, lon: float, with_details: bool) -> dict:
         "direction": _compass(_bearing_deg(lat, lon, ac["lat"], ac["lon"])) if dist_m > 300 else None,
         "heading": _compass(ac.get("track") if isinstance(ac.get("track"), (int, float)) else None),
         "elevation_deg": ac["_elev"],
+        # Alleen gezet als hij nu niet boven je is maar net wel was / zo komt.
+        "pass": None if not ac.get("_passing") else {
+            "in_s": ac["_peak_t"],
+            "overhead": ac["_peak_elev"] >= OVERHEAD_DEG,
+        },
         "airline": None,
         "flight_number": None,
         "from": None,
@@ -335,12 +371,25 @@ def overhead():
         dist_m = max(_haversine_m(lat, lon, ac["lat"], ac["lon"]), 1.0)
         ac["_elev"] = round(math.degrees(math.atan2(max(alt_ft, 0) * 0.3048, dist_m)))
         ac["_dist"] = dist_m
+        ac["_peak_elev"], ac["_peak_t"] = _pass_info(ac, alt_ft, lat, lon)
         airborne.append(ac)
 
-    overhead_ac = sorted(
-        (a for a in airborne if a["_elev"] >= MIN_ELEVATION_DEG),
-        key=lambda a: -a["_elev"],
-    )[:MAX_RESULTS]
+    # Eerst wat nu boven je is (hoogst eerst), dan wat er zo aankomt, dan wat
+    # net over kwam (meest recent eerst).
+    now_ac = sorted((a for a in airborne if a["_elev"] >= MIN_ELEVATION_DEG), key=lambda a: -a["_elev"])
+    # Hoogste punt op de rand van het venster = nog steeds aan het stijgen aan
+    # de hemel (typisch een hoge, langzaam passerende vlieger). Dan is "komt
+    # over 30 s langs" misleidend; die verschijnt vanzelf als "nu boven je".
+    passing = [
+        a for a in airborne
+        if a["_elev"] < MIN_ELEVATION_DEG and a["_peak_elev"] >= MIN_ELEVATION_DEG
+        and -LOOK_BACK_S < a["_peak_t"] < LOOK_AHEAD_S
+    ]
+    for a in passing:
+        a["_passing"] = True
+    coming = sorted((a for a in passing if a["_peak_t"] > 0), key=lambda a: a["_peak_t"])
+    gone = sorted((a for a in passing if a["_peak_t"] < 0), key=lambda a: -a["_peak_t"])
+    overhead_ac = (now_ac + coming + gone)[:MAX_RESULTS]
     nearest = None
     if not overhead_ac and airborne:
         nearest = _describe(min(airborne, key=lambda a: a["_dist"]), lat, lon, with_details=False)
