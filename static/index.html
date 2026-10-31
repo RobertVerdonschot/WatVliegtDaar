@@ -34,6 +34,7 @@
   }
   .top { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 14px; }
   .tag { background: var(--accent); color: var(--card); border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 600; }
+  .when { color: var(--accent); font-weight: 600; font-size: 15px; margin-top: 6px; }
   .route { font-size: 24px; font-weight: 700; margin: 6px 0 2px; overflow-wrap: anywhere; }
   .route .arrow { color: var(--accent); margin: 0 4px; }
   .sub { color: var(--muted); font-size: 14px; margin-bottom: 14px; }
@@ -48,6 +49,7 @@
   .msg strong { display: block; color: var(--text); font-size: 18px; margin-bottom: 6px; }
   footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 18px; }
   footer a { color: inherit; }
+  .note { color: var(--muted); font-size: 14px; text-align: center; margin: 4px 8px 0; }
   button {
     font: inherit; background: var(--accent); color: var(--card); border: 0;
     border-radius: 10px; padding: 10px 18px; margin-top: 14px; font-weight: 600;
@@ -58,14 +60,17 @@
 <main>
   <h1><img src="/icons/airplane.webp" alt="">Wat vliegt daar?</h1>
   <div id="content"><div class="card msg"><img src="/icons/location-pin.webp" alt=""><strong>Even je locatie zoeken...</strong></div></div>
+  <div id="note" class="note" hidden></div>
   <footer id="footer"></footer>
 </main>
 <script>
-const REFRESH_MS = 15000;
+const REFRESH_MS = 5000;
 const content = document.getElementById('content');
 const footer = document.getElementById('footer');
 let position = null;
 let timer = null;
+let busy = false;
+const note = document.getElementById('note');
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = n => n.toLocaleString('nl-NL');
@@ -87,19 +92,43 @@ function field(iconName, label, value, wide) {
   return `<div class="f${wide ? ' wide' : ''}">${icon(iconName)}<div><dt>${label}</dt><dd>${esc(value)}</dd></div></div>`;
 }
 
+function secs(s) {
+  s = Math.abs(s);
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60), r = s % 60;
+  return r ? `${m} min ${r} s` : `${m} min`;
+}
+
+// Alleen voor toestellen die nu niet boven je zijn maar dat net waren of zo
+// worden. "over" als hij (bijna) recht boven je komt, anders "langs".
+function when(p) {
+  if (!p.pass) return '';
+  const t = p.pass.in_s, over = p.pass.overhead;
+  if (t < 0) return over ? `Kwam ${secs(t)} geleden over je heen` : `Vloog ${secs(t)} geleden langs`;
+  return over ? `Komt over ${secs(t)} over je heen` : `Komt over ${secs(t)} langs`;
+}
+
 function card(p) {
   const from = place(p.from), to = place(p.to);
   const kind = p.is_helicopter ? 'Helikopter' : 'Vliegtuig';
-  const title = from && to
-    ? `${esc(from)}<span class="arrow">&rarr;</span>${esc(to)}`
-    : (p.is_helicopter ? 'Helikopter' : 'Route onbekend');
+  let title = p.is_helicopter ? 'Helikopter' : 'Route onbekend';
   const subParts = [];
-  if (from && to) subParts.push(`${esc(p.from.name)} naar ${esc(p.to.name)}`);
+  if (from && to) {
+    title = `${esc(from)}<span class="arrow">&rarr;</span>${esc(to)}`;
+    subParts.push(`${esc(p.from.name)} naar ${esc(p.to.name)}`);
+  } else if (from) {
+    title = `Vanaf ${esc(from)}`;
+    subParts.push(`Net vertrokken van ${esc(p.from.name)}, bestemming onbekend`);
+  } else if (to) {
+    title = `Naar ${esc(to)}`;
+    subParts.push(`Gaat landen op ${esc(p.to.name)}, vertrek onbekend`);
+  }
   const who = [p.airline, p.flight_number || p.callsign].filter(Boolean).map(esc).join(' &middot; ');
   const vertical = {stijgt: ', stijgt', daalt: ', daalt'}[p.vertical] || '';
   const where = p.direction ? `${km(p.distance_m)} ${p.direction}` : 'recht boven je';
   return `<div class="card">
     <div class="top"><span>${who || esc(p.registration || 'Onbekend toestel')}</span><span class="tag">${kind}</span></div>
+    ${when(p) ? `<div class="when">${esc(when(p))}</div>` : ''}
     <div class="route">${title}</div>
     <div class="sub">${subParts.join('') || '&nbsp;'}</div>
     <dl>
@@ -114,8 +143,13 @@ function card(p) {
 }
 
 async function refresh() {
-  if (!position) return;
-  const {latitude, longitude} = position.coords;
+  if (!position || busy) return;
+  busy = true;
+  const {latitude, longitude, accuracy} = position.coords;
+  // Binnen of met "locatie: bij benadering" kan je telefoon honderden meters
+  // ernaast zitten; dan klopt "boven je" ook niet. Zeg dat dan gewoon.
+  note.hidden = !(accuracy > 300);
+  note.textContent = `Je locatie is onnauwkeurig (\u00b1 ${km(accuracy)}). Buiten en met "nauwkeurige locatie" aan werkt het beter.`;
   try {
     const r = await fetch(`/api/overhead?lat=${latitude.toFixed(4)}&lon=${longitude.toFixed(4)}`);
     const data = await r.json();
@@ -129,9 +163,11 @@ async function refresh() {
     } else {
       message('Niks boven je hoofd', 'Ook in de buurt vliegt nu niks.', false, 'cloud');
     }
-    footer.innerHTML = `Bijgewerkt ${new Date().toLocaleTimeString('nl-NL')} &middot; ververst elke 15 s &middot; data: adsb.fi, adsb.lol, adsbdb.com &middot; icoontjes: <a href="https://www.thiings.co" target="_blank" rel="noopener">thiings.co</a>`;
+    footer.innerHTML = `Bijgewerkt ${new Date().toLocaleTimeString('nl-NL')} &middot; ververst elke 5 s &middot; data: adsb.fi, adsb.lol, adsbdb.com &middot; icoontjes: <a href="https://www.thiings.co" target="_blank" rel="noopener">thiings.co</a>`;
   } catch (e) {
     message('Lukt even niet', e.message || 'Geen verbinding.', true);
+  } finally {
+    busy = false;
   }
 }
 
@@ -140,11 +176,27 @@ function start() {
     message('Geen locatie', 'Je browser geeft geen locatie door.');
     return;
   }
+  // Snel starten met de laatst bekende (grove) locatie, daarna verfijnt
+  // watchPosition met GPS. Een nauwkeurige eerste fix kan 5-20 s duren.
+  navigator.geolocation.getCurrentPosition(
+    pos => { if (!position) { position = pos; refresh(); } },
+    () => {},
+    {enableHighAccuracy: false, maximumAge: 120000, timeout: 5000}
+  );
   navigator.geolocation.watchPosition(
-    pos => { const first = !position; position = pos; if (first) refresh(); },
-    err => message('Geen locatie',
-      err.code === 1 ? 'Geef de app toestemming voor je locatie (instellingen van je browser).' : 'Locatie niet gevonden.', true, 'location-pin'),
-    {enableHighAccuracy: false, maximumAge: 30000, timeout: 20000}
+    pos => {
+      const first = !position || position.coords.accuracy > 300;
+      position = pos;
+      if (first) refresh();
+    },
+    err => {
+      // Een time-out terwijl we al een locatie hebben is geen probleem, de
+      // vorige positie blijft dan gewoon in gebruik.
+      if (position && err.code !== 1) return;
+      message('Geen locatie',
+        err.code === 1 ? 'Geef de app toestemming voor je locatie (instellingen van je browser).' : 'Locatie niet gevonden.', true, 'location-pin');
+    },
+    {enableHighAccuracy: true, maximumAge: 5000, timeout: 20000}
   );
   clearInterval(timer);
   timer = setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);

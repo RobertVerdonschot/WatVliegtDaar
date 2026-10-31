@@ -27,16 +27,34 @@ gebruikt.
 
 ## Hoe het werkt
 
-- Je telefoon stuurt je locatie naar de server (`/api/overhead`), elke 15
-  seconden zolang de app open staat.
-- De server haalt alle toestellen binnen ~18 km op bij
+- Je telefoon stuurt je locatie (GPS, nauwkeurig) naar de server
+  (`/api/overhead`), elke 5 seconden zolang de app open staat. Is je locatie
+  onnauwkeuriger dan 300 m, dan zegt de app dat.
+- De server haalt alle toestellen binnen ~37 km op bij
   [adsb.fi](https://adsb.fi) (reserve: [adsb.lol](https://adsb.lol)).
-  Beide zijn gratis, door vrijwilligers gedragen ADS-B-netwerken.
+  Beide zijn gratis, door vrijwilligers gedragen ADS-B-netwerken. Hun data is
+  meestal minder dan 1-2 seconden oud (gemeten rond Schiphol).
+- Elke positie wordt met koers en snelheid doorgerekend naar "nu" (max 20 s
+  vooruit). Bij een test met 10 s oude data scheelde dat mediaan 870 m naar
+  40 m afwijking.
 - "Boven je" = minstens 35 graden boven de horizon. Een lijnvliegtuig op 10 km
   hoogte telt dan tot ~14 km afstand mee, een heli op 300 m tot ~430 m.
   Maximaal 3 toestellen, het hoogst-aan-de-hemel eerst. Is er niks, dan zie je
   welk toestel het dichtstbij is.
+- Een laagvlieger is in een halve minuut over je heen. Daarom rekent de app
+  met koers, snelheid en stijgsnelheid terug en vooruit: wat de afgelopen 2
+  minuten over je heen kwam of in de komende 30 s komt, staat er ook bij
+  ("Kwam 40 s geleden over je heen", of "Vloog 1 min geleden langs" als hij
+  niet hoger dan 60 graden kwam). Rechte lijn, dus bij een bocht klopt het
+  minder; daarom niet verder terug dan 2 minuten. Hoge toestellen die nu nog
+  in beeld zijn krijgen geen tijd erbij.
 - Route, maatschappij en type komen van [adsbdb.com](https://www.adsbdb.com).
+- Is een toestel laag en stijgend vlak bij een luchthaven (< 3 km hoog, < 40 km
+  van het veld), dan is het daar net vertrokken. Laag en dalend (< 1,5 km
+  hoog, < 25 km) = gaat daar landen. Spreekt de routedatabase dat tegen, dan
+  wint de positie en zie je bv. "Vanaf Eindhoven, bestemming onbekend". De
+  luchthavenlijst (`airports.csv`, alleen velden met lijnvluchten) komt uit
+  [OurAirports](https://ourairports.com/data/), public domain.
 
 De drempel en zoekstraal staan bovenin `main.py` (`MIN_ELEVATION_DEG`,
 `SEARCH_RADIUS_NM`) als je ze anders wil.
@@ -44,9 +62,12 @@ De drempel en zoekstraal staan bovenin `main.py` (`MIN_ELEVATION_DEG`,
 ## Beperkingen, eerlijk gezegd
 
 - **Route kan fout zijn.** adsbdb kent per vluchtnummer één vaste route en
-  die wordt door vrijwilligers bijgehouden. Ligt het toestel duidelijk naast
-  die route, dan toont de app "Route onbekend" in plaats van iets fouts. Een
-  fout dat dicht bij de echte route ligt glipt er wel doorheen.
+  die wordt door vrijwilligers bijgehouden. Ryanair en andere maatschappijen
+  hergebruiken vluchtnummers, dus dat gaat soms mis (getest: een Ryanair
+  Eindhoven -> Milaan stond erin als Dortmund -> Malaga). Bij vertrek en
+  landing vangt de luchthavencheck dat af. Op kruishoogte niet: ligt het
+  toestel dan grofweg op de lijn van de foute route, dan zie je die foute
+  route.
 - **Niet alles is zichtbaar.** Alleen toestellen met een transponder die door
   een ontvanger van deze netwerken wordt opgepikt. Militair, sommige heli's
   en laagvliegende kleine toestellen kunnen ontbreken.
